@@ -259,4 +259,3 @@ class RIM(Base):
         elif self.pred_mode == 'reg':
             self._build_mseloss()
         self._build_optimizer()
-
