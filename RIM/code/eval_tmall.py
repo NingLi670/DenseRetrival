@@ -1,14 +1,13 @@
-import sys
-import os
-import numpy as np
-from dataloader import DataloaderRIM
-from sklearn.metrics import *
-import random
-import time
-import pickle as pkl
-import math
-from rim_cp import *
 import logging
+import os
+import random
+import sys
+import time
+
+from dataloader import DataloaderRIM
+
+from rim_cp import *
+
 logging.basicConfig(level=logging.INFO)
 import configparser
 from utils import *

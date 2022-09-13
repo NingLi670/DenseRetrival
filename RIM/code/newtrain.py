@@ -1,14 +1,18 @@
-import sys
-import os
-import numpy as np
-from newloader import DataloaderRIM
-from sklearn.metrics import *
-import random
-import time
-import pickle as pkl
-import math
-from newrim import *
 import logging
+import os
+import random
+import sys
+import time
+
+import numpy as np
+import tensorflow as tf
+from sklearn.metrics import log_loss, roc_auc_score
+
+from newrim import RIM as DenseDIM
+from rim_cp import RIM
+from newloader import DataloaderRIM as DataloaderDense
+from loader import DataloaderRIM
+
 logging.basicConfig(level=logging.INFO)
 import configparser
 
@@ -19,8 +23,10 @@ LOG_PATH_PREFIX = '../logs/'
 
 DECAY_FACTOR = 1
 
+
 def get_elapsed(start_time):
     return time.time() - start_time
+
 
 def eval(model, sess, dataloader, l2_norm):
     preds = []
@@ -37,12 +43,13 @@ def eval(model, sess, dataloader, l2_norm):
     logloss = log_loss(labels, preds)
     auc = roc_auc_score(labels, preds)
     loss = sum(losses) / len(losses)
-    
+
     logging.info("Time of evaluating on the test dataset: %.4fs" % (time.time() - t))
     return loss, logloss, auc
 
+
 def train(dataset,
-          model_type, 
+          model_type,
           model_name,
           train_dataloader,
           test_dataloader,
@@ -50,21 +57,23 @@ def train(dataset,
           max_epoch,
           eval_freq,
           log_freq,
-          feature_size, 
+          feature_size,
           eb_dim,
-          s_num, 
-          c_num, 
+          s_num,
+          c_num,
           label_num,
           lr,
           l2_norm):
-    #tf.reset_default_graph()
+    # tf.reset_default_graph()
     tf.compat.v1.reset_default_graph()
 
-    if model_type == 'RIM':
-        model = RIM(feature_size, eb_dim, s_num, c_num, label_num)
+    if model_type == 'Dense':
+        model = DenseDIM(feature_size, eb_dim, s_num, c_num, label_num)
     else:
-        logging.info('WRONG MODEL TYPE')
-        exit(1)
+        model = RIM(feature_size, eb_dim, s_num, c_num, label_num)
+    # else:
+    #     logging.info('WRONG MODEL TYPE')
+    #     exit(1)
 
     # gpu settings
     gpu_options = tf.GPUOptions(allow_growth=True)
@@ -77,9 +86,9 @@ def train(dataset,
         sess.run(tf.local_variables_initializer())
 
         # before training process, get initial test evaluation
-        step = 0 # training step
-        log_step = 0 # training log step
-        eval_step = 0 # eval step
+        step = 0  # training step
+        log_step = 0  # training log step
+        eval_step = 0  # eval step
 
         test_losses = []
         test_log_losses = []
@@ -97,7 +106,8 @@ def train(dataset,
         writer.add_summary(summary, global_step=eval_step)
         eval_step += 1
 
-        logging.info("STEP %d  LOSS TEST: %.4f  LOG_LOSS TEST: %.4f AUC TEST: %.4f  ELASPED: %.2fs" % (step, test_loss, test_log_loss, test_auc, get_elapsed(start_time)))
+        logging.info("STEP %d  LOSS TEST: %.4f  LOG_LOSS TEST: %.4f AUC TEST: %.4f  ELASPED: %.2fs" % (
+            step, test_loss, test_log_loss, test_auc, get_elapsed(start_time)))
 
         early_stop = False
 
@@ -109,7 +119,7 @@ def train(dataset,
                 logging.info('DECAYED LR IS {}'.format(lr))
             if early_stop:
                 break
-            
+
             for batch_data in train_dataloader:
                 if early_stop:
                     break
@@ -122,7 +132,9 @@ def train(dataset,
                                                 tf.Summary.Value(tag='train_l2_loss', simple_value=train_l2_loss)])
                     writer.add_summary(summary, global_step=log_step)
                     log_step += 1
-                    logging.info("STEP %d  LOSS TRAIN: %.4f  LOG_LOSS TRAIN: %.4f  L2_LOSS TRAIN: %.4f  Elasped: %.2fs" % (step, train_loss, train_log_loss, train_l2_loss, get_elapsed(start_time)))
+                    logging.info(
+                        "STEP %d  LOSS TRAIN: %.4f  LOG_LOSS TRAIN: %.4f  L2_LOSS TRAIN: %.4f  Elasped: %.2fs" % (
+                            step, train_loss, train_log_loss, train_l2_loss, get_elapsed(start_time)))
 
                 if step % eval_freq == 0:
                     test_dataloader.refresh()
@@ -132,11 +144,12 @@ def train(dataset,
                     test_log_losses.append(test_log_loss)
                     test_aucs.append(test_auc)
 
-                    logging.info("STEP %d  LOSS TEST: %.4f  LOG_LOSS TEST: %.4f AUC TEST: %.4f  ELASPED: %.2fs" % (step, test_loss, test_log_loss, test_auc, get_elapsed(start_time)))
-                    
+                    logging.info("STEP %d  LOSS TEST: %.4f  LOG_LOSS TEST: %.4f AUC TEST: %.4f  ELASPED: %.2fs" % (
+                        step, test_loss, test_log_loss, test_auc, get_elapsed(start_time)))
+
                     summary = tf.Summary(value=[tf.Summary.Value(tag='test_loss', simple_value=test_loss),
-                                    tf.Summary.Value(tag='test_log_loss', simple_value=test_log_loss),
-                                    tf.Summary.Value(tag='test_auc', simple_value=test_auc)])
+                                                tf.Summary.Value(tag='test_log_loss', simple_value=test_log_loss),
+                                                tf.Summary.Value(tag='test_auc', simple_value=test_auc)])
                     writer.add_summary(summary, global_step=eval_step)
                     eval_step += 1
 
@@ -147,19 +160,20 @@ def train(dataset,
                             os.makedirs(model_dir)
                         model_path = os.path.join(model_dir, 'ckpt')
                         model.save(sess, model_path)
-                        
+
                     if len(test_losses) > 2 and epoch > 0:
                         if (test_losses[-1] > test_losses[-2] and test_losses[-2] > test_losses[-3]):
                             early_stop = True
                             print("big test_losses:early stop!")
-                        if (test_losses[-2] - test_losses[-1]) <= 0.0001 and (test_losses[-3] - test_losses[-2]) <= 0.0001:
+                        if (test_losses[-2] - test_losses[-1]) <= 0.0001 and (
+                                test_losses[-3] - test_losses[-2]) <= 0.0001:
                             early_stop = True
                             print("smooth test_losses:early stop!")
-            
+
             # refresh dataloader if not early stop
             if not early_stop:
                 train_dataloader.refresh()
-        
+
         # write results
         log_dir = os.path.join(LOG_PATH_PREFIX, dataset, str(s_num))
         log_path = os.path.join(log_dir, '{}.txt'.format(model_type))
@@ -182,15 +196,19 @@ if __name__ == '__main__':
         os.mkdir(SAVE_PATH_PREFIX)
     if not os.path.exists(LOG_PATH_PREFIX):
         os.mkdir(LOG_PATH_PREFIX)
-    
 
     # read config file
     cnf_dataset = configparser.ConfigParser()
-    cnf_dataset.read('../configs/config.ini')
+    dataloader = DataloaderDense
+    if model_type == 'Dense':
+        cnf_dataset.read('../configs/config.ini')
+    else:
+        cnf_dataset.read('../configs/config_old.ini')
+        dataloader = DataloaderRIM
 
     cnf_train = configparser.ConfigParser()
     cnf_train.read('../configs/train_params.ini')
-    
+
     # get training params
     batch_sizes = list(map(int, cnf_train.get(dataset, 'batch_sizes').split(',')))
     lrs = list(map(float, cnf_train.get(dataset, 'lrs').split(',')))
@@ -205,57 +223,56 @@ if __name__ == '__main__':
     # get dataset stats
     feature_size = cnf_dataset.getint(dataset, 'feat_size')
     s_num = cnf_dataset.getint(dataset, 's_num')
-    c_num = cnf_dataset.getint(dataset, 'c_num') 
+    c_num = cnf_dataset.getint(dataset, 'c_num')
     label_num = cnf_dataset.getint(dataset, 'label_num')
     dataset_size = cnf_dataset.getint(dataset, 'dataset_size')
     shuffle = cnf_dataset.getboolean(dataset, 'shuffle')
-
     # test dataloader
     if model_type == 'RIM_Random':
-        test_dataloader = DataloaderRIM(eval_batch_size,
-                                    cnf_dataset.get(dataset, 'remap_c_pos_list'),
-                                    s_num,
-                                    cnf_dataset.get(dataset, 'target_test_file'),
-                                    cnf_dataset.get(dataset, 'target_test_label_file'),
-                                    cnf_dataset.get(dataset, 'search_res_col_test_random_file'),
-                                    cnf_dataset.get(dataset, 'search_res_label_test_random_file'),
-                                    cnf_dataset.get(dataset, 'search_pool_file'),
-                                    False)
+        test_dataloader = dataloader(eval_batch_size,
+                                     cnf_dataset.get(dataset, 'remap_c_pos_list'),
+                                     s_num,
+                                     cnf_dataset.get(dataset, 'target_test_file'),
+                                     cnf_dataset.get(dataset, 'target_test_label_file'),
+                                     cnf_dataset.get(dataset, 'search_res_col_test_random_file'),
+                                     cnf_dataset.get(dataset, 'search_res_label_test_random_file'),
+                                     cnf_dataset.get(dataset, 'search_pool_file'),
+                                     False)
     else:
-        test_dataloader = DataloaderRIM(eval_batch_size,
-                                    cnf_dataset.get(dataset, 'remap_c_pos_list'),
-                                    s_num,
-                                    cnf_dataset.get(dataset, 'target_test_file'), #在config.ini里修改
-                                    cnf_dataset.get(dataset, 'target_test_label_file'), #在config.ini里修改
-                                    cnf_dataset.get(dataset, 'search_res_col_test_file'), #在config.ini里修改
-                                    cnf_dataset.get(dataset, 'search_res_label_test_file'), #在config.ini里修改
-                                    cnf_dataset.get(dataset, 'search_pool_file'), #未使用
-                                    False)
-    
-    logging.info('got test dataloader')
+        test_dataloader = dataloader(eval_batch_size,
+                                     cnf_dataset.get(dataset, 'remap_c_pos_list'),
+                                     s_num,
+                                     cnf_dataset.get(dataset, 'target_test_file'),  # 在config.ini里修改
+                                     cnf_dataset.get(dataset, 'target_test_label_file'),  # 在config.ini里修改
+                                     cnf_dataset.get(dataset, 'search_res_col_test_file'),  # 在config.ini里修改
+                                     cnf_dataset.get(dataset, 'search_res_label_test_file'),  # 在config.ini里修改
+                                     cnf_dataset.get(dataset, 'search_pool_file'),  # 未使用
+                                     False)
 
+    logging.info('got test dataloader')
     for batch_size in batch_sizes:
         for lr in lrs:
             for l2_norm in l2_norms:
                 model_name = '_'.join([model_type, str(batch_size), str(lr), str(l2_norm)])
-                
-                # log writters
+
+                # log writers
                 writer_dir = os.path.join(LOG_PATH_PREFIX, dataset, str(s_num), model_name)
                 if not os.path.exists(writer_dir):
                     os.makedirs(writer_dir)
 
-                writer = tf.summary.FileWriter(logdir=writer_dir)                
-                #writer = tf.summary.create_file_writer(writer_dir)
-                train_dataloader = DataloaderRIM(batch_size,
-                                                cnf_dataset.get(dataset, 'remap_c_pos_list'),
-                                                s_num,
-                                                cnf_dataset.get(dataset, 'target_train_file'), #在config.ini里修改
-                                                cnf_dataset.get(dataset, 'target_train_label_file'), #在config.ini里修改
-                                                cnf_dataset.get(dataset, 'search_res_col_train_file'), #在config.ini里修改
-                                                cnf_dataset.get(dataset, 'search_res_label_train_file'), #在config.ini里修改
-                                                cnf_dataset.get(dataset, 'search_pool_file'), #未使用
-                                                shuffle)
-
+                writer = tf.summary.FileWriter(logdir=writer_dir)
+                # writer = tf.summary.create_file_writer(writer_dir)
+                train_dataloader = dataloader(batch_size,
+                                              cnf_dataset.get(dataset, 'remap_c_pos_list'),
+                                              s_num,
+                                              cnf_dataset.get(dataset, 'target_train_file'),  # 在config.ini里修改
+                                              cnf_dataset.get(dataset, 'target_train_label_file'),  # 在config.ini里修改
+                                              cnf_dataset.get(dataset, 'search_res_col_train_file'),
+                                              # 在config.ini里修改
+                                              cnf_dataset.get(dataset, 'search_res_label_train_file'),
+                                              # 在config.ini里修改
+                                              cnf_dataset.get(dataset, 'search_pool_file'),  # 未使用
+                                              shuffle)
 
                 logging.info('got train dataloader')
                 # other training params
@@ -264,20 +281,20 @@ if __name__ == '__main__':
 
                 logging.info('training begin...')
                 train(dataset,
-                    model_type, 
-                    model_name,
-                    train_dataloader,
-                    test_dataloader,
-                    writer,
-                    max_epoch,
-                    eval_freq,
-                    log_freq,
-                    feature_size, 
-                    eb_dim,
-                    s_num, 
-                    c_num, 
-                    label_num,
-                    lr,
-                    l2_norm)
-                
+                      model_type,
+                      model_name,
+                      train_dataloader,
+                      test_dataloader,
+                      writer,
+                      max_epoch,
+                      eval_freq,
+                      log_freq,
+                      feature_size,
+                      eb_dim,
+                      s_num,
+                      c_num,
+                      label_num,
+                      lr,
+                      l2_norm)
+
                 test_dataloader.refresh()

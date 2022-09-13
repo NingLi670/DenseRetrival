@@ -29,7 +29,7 @@ def deal1(data_dir):
 
 def deal(args):
     data_dir = os.path.join(args.data_dir, args.dataset)
-    if args.dataset in ['tmall', 'taobao']:
+    if args.dataset in ['tmall', 'taobao', 'alipay']:
         deal1(data_dir)
 
 
@@ -38,7 +38,7 @@ if __name__ == '__main__':
     # path
     parser.add_argument('--data_dir', type=str, default='/NAS2020/Share/lining/rim_data/')
     # options
-    parser.add_argument('-d', '--dataset', type=str, default='tmall', choices=['tmall', 'taobao'])
+    parser.add_argument('-d', '--dataset', type=str, default='tmall', choices=['tmall', 'taobao', 'alipay'])
 
     args = parser.parse_args()
     deal(args)

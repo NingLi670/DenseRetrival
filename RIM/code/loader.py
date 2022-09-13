@@ -28,11 +28,11 @@ class DataloaderRIM(object):
         self.shuffle = shuffle
 
         self.labels = np.loadtxt(target_label_file, delimiter=',', dtype=np.int32, usecols=[-1])
-        self.target = np.load(target_file)
+        self.target = np.loadtxt(target_file, delimiter=',', dtype=np.int32)[:, :-1]
         self.search_res_col = np.load(search_res_col_file)['index'][:, :s_num]
         self.search_res_label = np.load(search_res_label_file)[self.search_res_col]
 
-        self.search_pool = np.load(search_pool_file)
+        self.search_pool = np.loadtxt(search_pool_file, delimiter=',', dtype=np.int32)[:, :-1]
         logging.info('data loaded')
 
         # shuffle
@@ -97,8 +97,7 @@ if __name__ == "__main__":
 
     # read config file
     cnf = configparser.ConfigParser()
-    cnf.read('../configs/config.ini')
-
+    cnf.read('../configs/config_old.ini')
     dataloader_rim = DataloaderRIM(batch_size,
                                    cnf.get(dataset, 'remap_c_pos_list'),
                                    cnf.getint(dataset, 's_num'),
