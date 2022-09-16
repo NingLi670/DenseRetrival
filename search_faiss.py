@@ -11,11 +11,10 @@ def search(args):
     t1 = time.perf_counter()
     emb_search = np.load(os.path.join(data_dir, 'emb_search.npy'))
     print("Data Loaded! Costed {}s".format(time.perf_counter() - t1))
-    # search_pool, query_train, query_test = [emb[_] for _ in ['search', 'train', 'test']]
 
     index = faiss.IndexFlatIP(args.dim)  # build the index
     index = faiss.index_cpu_to_all_gpus(index)
-    index.add(normalize(emb_search[:30000000, :args.dim]))
+    index.add(normalize(emb_search[40000000:, :args.dim]))
     print("Index Add!")
     for target in ['train', 'test']:
         t1 = time.perf_counter()
@@ -23,7 +22,7 @@ def search(args):
         target_score, target_index = index.search(normalize(emb[:, :args.dim]), args.candidate)  # actual search
         target_index = target_index.astype('int32')
         store_dir = {'index': target_index, 'score': target_score}
-        np.savez(os.path.join(data_dir, 'search_3_{}'.format(target)), **store_dir)
+        np.savez(os.path.join(data_dir, 'search_4_{}'.format(target)), **store_dir)
         print(time.perf_counter() - t1)
 
 

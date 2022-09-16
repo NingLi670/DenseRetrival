@@ -37,7 +37,7 @@ def search(args):
     )
     result = es.search(index=args.dataset)
     print(result)
-    for target in ['train', 'test']:
+    for target in ['test']:
         target_data = np.loadtxt(os.path.join(args.dir, args.dataset, 'target_{}.csv'.format(target)),
                                  delimiter=',', dtype=str)[:, :-1]
         target_data = np.array_split(target_data, 100)

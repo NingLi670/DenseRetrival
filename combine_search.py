@@ -5,7 +5,7 @@ import numpy as np
 
 def f():
     for mode in ['train', 'test']:
-        base_plus = [0, 40000000, 80000000, 110000000]
+        base_plus = [0, 10000000, 20000000, 30000000, 40000000]
         data = [np.load('search_{}_{}.npz'.format(i, mode)) for i in range(len(base_plus))]
         data_index = [_['index'] for _ in data]
         data_score = [_['score'] for _ in data]
